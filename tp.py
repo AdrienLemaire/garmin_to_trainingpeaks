@@ -1,26 +1,11 @@
 # -*- coding: utf-8 -*-
-# Chmouel Boudjnah <chmouel@chmouel.com>
-#
-# Play with TP api, most of that stuff is from tapirik garmin code, probably
-# have the same there for their trainingpeaks code.
-#
-# Licensed under the Apache License, Version 2.0 (the "License"); you may
-# not use this file except in compliance with the License. You may obtain
-# a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-# License for the specific language governing permissions and limitations
-# under the License.
 import fcntl
 import requests
 import tempfile
 import time
 import datetime
 import json
+from bs4 import BeautifulSoup
 
 from dateutil.relativedelta import relativedelta
 
@@ -86,10 +71,6 @@ class TPconnect(object):
 
     def _get_session(self):
         session = requests.Session()
-        data = {
-            "Username": self.username,
-            "Password": self.password,
-        }
         params = {}
         preResp = session.get("https://home.trainingpeaks.com/login",
                               params=params)
@@ -97,6 +78,13 @@ class TPconnect(object):
             raise Exception("SSO prestart error %s %s" %
                             (preResp.status_code, preResp.text))
 
+        soup = BeautifulSoup(preResp.text)
+        hidden_tag = soup.find_all("input", type="hidden")[0].attrs
+        data = {
+            "Username": self.username,
+            "Password": self.password,
+            hidden_tag['name']: hidden_tag['value']
+        }
         ssoResp = session.post("https://home.trainingpeaks.com/login",
                                params=params,
                                data=data, allow_redirects=False)
@@ -113,17 +101,13 @@ class TPconnect(object):
 
         if not dateoptions['back']:
             dateoptions['back']['days'] = 1
-            oldd = (datetime.datetime.now().today() +
-                    relativedelta(**dateoptions['back'])).strftime("%Y-%m-%d")
-        else:
-            oldd = dateoptions['back']
+        oldd = (datetime.datetime.now().today() +
+                relativedelta(**dateoptions['back'])).strftime("%Y-%m-%d")
 
         if not dateoptions['front']:
             dateoptions['front']['month'] = 6
-            newd = (datetime.datetime.now().today() +
-                    relativedelta(**dateoptions['front'])).strftime("%Y-%m-%d")
-        else:
-            newd = dateoptions['front']
+        newd = (datetime.datetime.now().today() +
+                relativedelta(**dateoptions['front'])).strftime("%Y-%m-%d")
 
         url = 'https://tpapi.trainingpeaks.com' + \
               '/fitness/v1/athletes/' + str(self.athlete_id) + \
