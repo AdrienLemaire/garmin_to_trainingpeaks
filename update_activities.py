@@ -1,62 +1,56 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import os
 import tp
 import json
+from pathlib import Path
 
-WORKOUT_URL = 'https://tpapi.trainingpeaks.com' + \
-              '/fitness/v4/athletes/%d/workouts/%s'
+WORKOUT_URL = 'https://tpapi.trainingpeaks.com/fitness/v5/athletes/{}/workouts/{}'
+
+
+
+def update_distance_if_indoor_cycling(activity):
+    if activity['activityName'] == "Indoor Cycling":
+        distance = activity['distance']
+        day, start_time = activity['startTimeLocal'].split()
+        tp_activities = json.loads(tpconnect.get_workouts_for_day(day))
+        try:
+            indoor_cycling = [a for a in tp_activities 
+                    if a['title'] == 'Indoor Cycling'
+                    and a['startTime'] == '{}T{}'.format(day, start_time)
+            ][0]
+        except:
+            print("[indoor cycling] Couldn't find the workout startTime={}T{} in trainingpeaks".format(
+               day, start_time 
+            ))
+            return
+        workout_id = indoor_cycling['workoutId']
+
+        if indoor_cycling['distance'] == distance:
+            print('.', end='')
+            return  # no point sending a request with the same data
+
+        indoor_cycling['distance'] = distance
+        url = WORKOUT_URL.format(tpconnect.athlete_id, workout_id)
+
+        res = tpconnect.session.put(url, indoor_cycling)
+        if res.status_code != 200:
+            print("[{}] Error when updating".format(workout_id))
+            return
+
+        print("[{}] distance: {}".format(workout_id, distance))
+
 
 
 if __name__ == '__main__':
 
+    path = input("path to the garmin activities.json file:")
+    garmin_activities = json.loads(open(Path(path).resolve()).read())
+
     username, password = open("trainingpeaks.key").read().rstrip().split(':')
     tpconnect = tp.TPconnect(username, password)
-    datetoption = {
-        'back': {'days': -7},
-        'front': {'days': 0}
-    }
-    activities = json.loads(tpconnect.get_workouts(datetoption))
 
-    for jeez in activities:
-        workout_id = jeez['workoutId']
-        url = WORKOUT_URL % (tpconnect.athlete_id, workout_id)
 
-        if 'workoutTypeValueId' not in jeez:
-            continue
-
-        if int(jeez['workoutTypeValueId']) != 2:  # not a cycling
-            continue
-
-        detailUrl = "https://tpapi.trainingpeaks.com/" + \
-                    "fitness/v2/athletes/%s/workouts/%s/detaildata" % (
-                        tpconnect.athlete_id,
-                        jeez['workoutId'])
-        resp = tpconnect.session.get(detailUrl)
-        if resp.status_code != 200:
-            print(resp)
-            print(resp._content)
-            raise Exception("Cannot get athlete activities")
-
-        if not jeez['title'] or jeez['title'] == 'Commute':
-            detaildata = json.loads(resp._content)
-
-            res = tpconnect.session.put(url, jeez)
-            if res.status_code != 200:
-                print("There was an error updating workout id: " + str(
-                    workout_id))
-                break
-
-        if not jeez['heartRateAverage']:
-            continue
-
-        # only do it when we have a TSS
-        if not jeez['tssActual']:
-            continue
-
-        jeez['tssActual'] = "0"
-
-        res = tpconnect.session.put(url, jeez)
-        if res.status_code != 200:
-            print("There was an error updating workout id: " + str(workout_id))
-            break
+    for activity in garmin_activities:
+        update_distance_if_indoor_cycling(activity)

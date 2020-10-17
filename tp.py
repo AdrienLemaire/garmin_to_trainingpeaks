@@ -120,5 +120,19 @@ class TPconnect(object):
         return(resp._content)
 
 
+    def get_workouts_for_day(self, day):
+        self.init()
+
+        url = 'https://tpapi.trainingpeaks.com' + \
+              '/fitness/v1/athletes/' + str(self.athlete_id) + \
+              '/workouts/' + day + '/' + day
+        resp = self.session.get(url)
+        if resp.status_code != 200:
+            print(resp)
+            print(resp._content)
+            raise Exception("Cannot get athlete activities")
+        return(resp._content)
+
+
 if __name__ == '__main__':
     pass
